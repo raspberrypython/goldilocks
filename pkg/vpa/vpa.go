@@ -31,12 +31,13 @@ import (
 
 // Reconciler checks if VPA objects should be created or deleted
 type Reconciler struct {
-	KubeClient                *kube.ClientInstance
-	VPAClient                 *kube.VPAClientInstance
-	OnByDefault               bool
-	IncludeNamespaces         []string
-	ExcludeNamespaces         []string
-	EnableDaemonSetController bool
+	KubeClient                  *kube.ClientInstance
+	VPAClient                   *kube.VPAClientInstance
+	OnByDefault                 bool
+	IncludeNamespaces           []string
+	ExcludeNamespaces           []string
+	EnableDaemonSetController   bool
+	EnableStatefulSetController bool
 }
 
 var singleton *Reconciler
@@ -143,6 +144,13 @@ func (vpa Reconciler) ReconcileNamespace(namespace *corev1.Namespace, dryrun boo
 		}
 	}
 
+	if vpa.EnableStatefulSetController {
+		err = reconcileNamespaceStatefulSets(vpa, nsName, filterVPAs(vpaResources, "statefulset"), dryrun)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -240,6 +248,53 @@ func reconcileNamespaceDaemonSets(vpa Reconciler, nsName string, vpaNames []stri
 	return nil
 }
 
+func reconcileNamespaceStatefulSets(vpa Reconciler, nsName string, vpaNames []string, dryrun bool) error {
+	//Get the list of statefulsets in the namespace
+	statefulsets, err := vpa.KubeClient.Client.AppsV1().StatefulSets(nsName).List(metav1.ListOptions{})
+	if err != nil {
+		klog.Error(err.Error())
+		return err
+	}
+
+	var statefulsetNames []string
+	klog.V(2).Infof("There are %d statefulsets in the namespace %v", len(statefulsets.Items), nsName)
+	for _, statefulset := range statefulsets.Items {
+		statefulsetNames = append(statefulsetNames, statefulset.ObjectMeta.Name)
+		klog.V(5).Infof("Found statefulset: %v", statefulset.ObjectMeta.Name)
+	}
+
+	// Create any Statefulset VPAs that need to be
+	vpaNeeded := utils.Difference(statefulsetNames, vpaNames)
+	klog.V(3).Infof("Diff statefulsets, vpas: %v", vpaNeeded)
+
+	if len(vpaNeeded) == 0 {
+		klog.Infof("All statefulset VPAs are in sync in %v.", nsName)
+	} else if len(vpaNeeded) > 0 {
+		for _, vpaName := range vpaNeeded {
+			err := createStatefulSetVPA(vpa.VPAClient, nsName, vpaName, dryrun)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Now that this is one, we can delete any VPAs that don't have matching statefulsets.
+	vpaDelete := utils.Difference(vpaNames, statefulsetNames)
+	klog.V(5).Infof("Diff vpas, statefulsets: %v", vpaDelete)
+
+	if len(vpaDelete) == 0 {
+		klog.Info("No statefulset VPAs to delete.")
+	} else if len(vpaDelete) > 0 {
+		for _, vpaName := range vpaDelete {
+			err := deleteVPA(vpa.VPAClient, nsName, vpaName, dryrun)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func filterVPAs(vpaList []v1beta2.VerticalPodAutoscaler, resourceTypeFilter string) []string {
 	var vpas []string
 
@@ -254,6 +309,13 @@ func filterVPAs(vpaList []v1beta2.VerticalPodAutoscaler, resourceTypeFilter stri
 	case "daemonset":
 		for _, vpa := range vpaList {
 			if vpa.Spec.TargetRef.Kind == "DaemonSet" {
+				vpas = append(vpas, vpa.ObjectMeta.Name)
+				klog.V(5).Infof("Found existing %v vpa: %v", vpa.Spec.TargetRef.Kind, vpa.ObjectMeta.Name)
+			}
+		}
+	case "statefulset":
+		for _, vpa := range vpaList {
+			if vpa.Spec.TargetRef.Kind == "StatefulSet" {
 				vpas = append(vpas, vpa.ObjectMeta.Name)
 				klog.V(5).Infof("Found existing %v vpa: %v", vpa.Spec.TargetRef.Kind, vpa.ObjectMeta.Name)
 			}
@@ -362,6 +424,39 @@ func createDaemonSetVPA(vpaClient *kube.VPAClientInstance, namespace string, vpa
 		}
 	} else {
 		klog.Infof("Dry run was set. Not creating daemonset vpa: %v", vpaName)
+	}
+	return nil
+}
+
+func createStatefulSetVPA(vpaClient *kube.VPAClientInstance, namespace string, vpaName string, dryrun bool) error {
+	updateMode := v1beta2.UpdateModeOff
+	vpa := &v1beta2.VerticalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   vpaName,
+			Labels: utils.VpaLabels,
+		},
+		Spec: v1beta2.VerticalPodAutoscalerSpec{
+			TargetRef: &autoscaling.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "StatefulSet",
+				Name:       vpaName,
+			},
+			UpdatePolicy: &v1beta2.PodUpdatePolicy{
+				UpdateMode: &updateMode,
+			},
+		},
+	}
+
+	if !dryrun {
+		klog.Infof("Creating statefulset vpa: %s in ns: %v", vpaName, namespace)
+		klog.V(9).Infof("%v", vpa)
+		_, err := vpaClient.Client.AutoscalingV1beta2().VerticalPodAutoscalers(namespace).Create(vpa)
+		if err != nil {
+			klog.Errorf("Error creating statefulset vpa: %v", err)
+			return err
+		}
+	} else {
+		klog.Infof("Dry run was set. Not creating statefulset vpa: %v", vpaName)
 	}
 	return nil
 }

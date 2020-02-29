@@ -130,6 +130,8 @@ func (client *Client) constructSummary(vpas *v1beta2.VerticalPodAutoscalerList, 
 			deploymentSummary(client, vpa, &resource, containerExclusions)
 		case "DaemonSet":
 			daemonsetSummary(client, vpa, &resource, containerExclusions)
+		case "StatefulSet":
+			statefulsetSummary(client, vpa, &resource, containerExclusions)
 		}
 		summary.Resources = append(summary.Resources, resource)
 	}
@@ -198,6 +200,45 @@ CONTAINER_REC_LOOP:
 
 		var container containerSummary
 		for _, c := range daemonset.Spec.Template.Spec.Containers {
+			container = containerSummary{
+				ContainerName:  containerRecommendation.ContainerName,
+				UpperBound:     containerRecommendation.UpperBound,
+				LowerBound:     containerRecommendation.LowerBound,
+				Target:         containerRecommendation.Target,
+				UncappedTarget: containerRecommendation.UncappedTarget,
+			}
+			if c.Name == containerRecommendation.ContainerName {
+				klog.V(6).Infof("Resources for %s: %v", c.Name, c.Resources)
+				container.Limits = c.Resources.Limits
+				container.Requests = c.Resources.Requests
+			}
+		}
+
+		resource.Containers = append(resource.Containers, container)
+	}
+}
+
+func statefulsetSummary(client *Client, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
+	statefulset, err := client.KubeClient.Client.AppsV1().StatefulSets(resource.Namespace).Get(resource.ResourceName, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("Error retrieving statefulset from API: %v", err)
+	}
+
+	if labelValue, labelFound := statefulset.Labels["goldilocks.fairwinds.com/exclude-containers"]; labelFound {
+		containerExclusions = append(containerExclusions, strings.Split(labelValue, ",")...)
+	}
+
+CONTAINER_REC_LOOP:
+	for _, containerRecommendation := range vpa.Status.Recommendation.ContainerRecommendations {
+		for _, exclusion := range containerExclusions {
+			if exclusion == containerRecommendation.ContainerName {
+				klog.V(2).Infof("Excluding container %v", containerRecommendation.ContainerName)
+				continue CONTAINER_REC_LOOP
+			}
+		}
+
+		var container containerSummary
+		for _, c := range statefulset.Spec.Template.Spec.Containers {
 			container = containerSummary{
 				ContainerName:  containerRecommendation.ContainerName,
 				UpperBound:     containerRecommendation.UpperBound,

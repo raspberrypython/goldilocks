@@ -158,6 +158,26 @@ func NewController(stop <-chan bool) {
 	defer close(dsTerm)
 	go DaemonSetWatcher.Watch(dsTerm)
 
+	klog.Infof("Creating watcher for StatefulSets.")
+	StatefulSetInformer := cache.NewSharedIndexInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return kubeClient.Client.AppsV1().StatefulSets("").List(metav1.ListOptions{})
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return kubeClient.Client.AppsV1().StatefulSets("").Watch(metav1.ListOptions{})
+			},
+		},
+		&v1.StatefulSet{},
+		0,
+		cache.Indexers{},
+	)
+
+	StatefulSetWatcher := createController(kubeClient.Client, StatefulSetInformer, "statefulset")
+	ssTerm := make(chan struct{})
+	defer close(ssTerm)
+	go StatefulSetWatcher.Watch(ssTerm)
+
 	klog.Infof("Creating watcher for Namespaces.")
 	NSInformer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
