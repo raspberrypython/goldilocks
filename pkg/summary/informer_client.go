@@ -20,6 +20,7 @@ type InformerClient struct {
 	vpaInf cache.SharedIndexInformer
 	depInf cache.SharedIndexInformer
 	dsInf  cache.SharedIndexInformer
+	ssInf  cache.SharedIndexInformer
 }
 
 // NewInformerClient returns a InformerClient
@@ -56,6 +57,20 @@ func NewInformerClient() *InformerClient {
 			cache.Indexers{},
 		),
 
+		ssInf: cache.NewSharedIndexInformer(
+			&cache.ListWatch{
+				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+					return client.Client.AppsV1().StatefulSets("").List(metav1.ListOptions{})
+				},
+				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+					return client.Client.AppsV1().StatefulSets("").Watch(metav1.ListOptions{})
+				},
+			},
+			&appsv1.StatefulSet{},
+			0,
+			cache.Indexers{},
+		),
+
 		vpaInf: cache.NewSharedIndexInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -77,6 +92,7 @@ func (c *InformerClient) Run(stopc chan struct{}) {
 	go c.vpaInf.Run(stopc)
 	go c.depInf.Run(stopc)
 	go c.dsInf.Run(stopc)
+	go c.ssInf.Run(stopc)
 	<-stopc
 }
 
@@ -150,4 +166,23 @@ func (c *InformerClient) GetDaemonSet(namespace, name string) (*appsv1.DaemonSet
 
 	// Return the object
 	return item.(*appsv1.DaemonSet).DeepCopy(), nil
+}
+
+// GetStatefulSet implements Client
+func (c *InformerClient) GetStatefulSet(namespace, name string) (*appsv1.StatefulSet, error) {
+	// Get item from informer cache
+	item, exists, err := c.ssInf.GetStore().GetByKey(namespace + "/" + name)
+
+	// Handle error
+	if err != nil {
+		return nil, err
+	}
+
+	// If item does not exist return an error
+	if !exists {
+		return nil, errors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, name)
+	}
+
+	// Return the object
+	return item.(*appsv1.StatefulSet).DeepCopy(), nil
 }

@@ -15,6 +15,7 @@
 package summary
 
 import (
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -54,6 +55,7 @@ type Client interface {
 	ListVerticalPodAutoscalers(vpaLabels map[string]string) ([]v1beta2.VerticalPodAutoscaler, error)
 	GetDeployment(namespace, name string) (*appsv1.Deployment, error)
 	GetDaemonSet(namespace, name string) (*appsv1.DaemonSet, error)
+	GetStatefulSet(namespace, name string) (*appsv1.StatefulSet, error)
 }
 
 // Summarizer checks if VPA objects should be created or deleted
@@ -229,8 +231,8 @@ CONTAINER_REC_LOOP:
 	}
 }
 
-func statefulsetSummary(client *Client, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
-	statefulset, err := client.KubeClient.Client.AppsV1().StatefulSets(resource.Namespace).Get(resource.ResourceName, metav1.GetOptions{})
+func statefulsetSummary(client *Summarizer, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
+	statefulset, err := client.Client.GetStatefulSet(resource.Namespace, resource.ResourceName)
 	if err != nil {
 		klog.Errorf("Error retrieving statefulset from API: %v", err)
 	}
@@ -258,6 +260,7 @@ CONTAINER_REC_LOOP:
 				UncappedTarget: containerRecommendation.UncappedTarget,
 			}
 			if c.Name == containerRecommendation.ContainerName {
+				fmt.Printf("Match Resources for %s: CR-%v, CL-%v, MR-%v, ML-%v\n", c.Name, c.Resources.Requests.Cpu(), c.Resources.Limits.Cpu(), c.Resources.Requests.Memory(), c.Resources.Limits.Memory())
 				klog.V(6).Infof("Resources for %s: %v", c.Name, c.Resources)
 				container.Limits = c.Resources.Limits
 				container.Requests = c.Resources.Requests

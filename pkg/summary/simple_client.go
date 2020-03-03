@@ -47,3 +47,8 @@ func (c *SimpleClient) GetDeployment(namespace, name string) (*appsv1.Deployment
 func (c *SimpleClient) GetDaemonSet(namespace, name string) (*appsv1.DaemonSet, error) {
 	return c.KubeClient.Client.AppsV1().DaemonSets(namespace).Get(name, metav1.GetOptions{})
 }
+
+// GetStatefulSet implements Client
+func (c *SimpleClient) GetStatefulSet(namespace, name string) (*appsv1.StatefulSet, error) {
+	return c.KubeClient.Client.AppsV1().StatefulSets(namespace).Get(name, metav1.GetOptions{})
+}
