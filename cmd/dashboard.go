@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/fairwindsops/goldilocks/pkg/dashboard"
+	"github.com/fairwindsops/goldilocks/pkg/summary"
 	"github.com/fairwindsops/goldilocks/pkg/utils"
 )
 
@@ -40,6 +41,8 @@ var dashboardCmd = &cobra.Command{
 	Short: "Run the goldilocks dashboard that will show recommendations.",
 	Long:  `Run the goldilocks dashboard that will show recommendations.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		informerClient := summary.UseInformerInstance()
+		go informerClient.Run(make(chan struct{}))
 
 		router := dashboard.GetRouter(serverPort, basePath, utils.VpaLabels, excludeContainers)
 		http.Handle("/", router)

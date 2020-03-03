@@ -17,9 +17,8 @@ package summary
 import (
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	v1beta2 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1beta2"
 	"k8s.io/klog"
 
@@ -50,45 +49,57 @@ type Summary struct {
 	Namespaces []string          `json:"namespaces"`
 }
 
-// Client checks if VPA objects should be created or deleted
-// what? how does it do that? it checks it??
-type Client struct {
-	//changing these two to match the naming in here...but should it be consistent?
-	KubeClient    *kube.ClientInstance
-	KubeClientVPA *kube.VPAClientInstance
+// Client gets the required resources the Summarizer
+type Client interface {
+	ListVerticalPodAutoscalers(vpaLabels map[string]string) ([]v1beta2.VerticalPodAutoscaler, error)
+	GetDeployment(namespace, name string) (*appsv1.Deployment, error)
+	GetDaemonSet(namespace, name string) (*appsv1.DaemonSet, error)
 }
 
-var singleton *Client
+// Summarizer checks if VPA objects should be created or deleted
+// what? how does it do that? it checks it??
+type Summarizer struct {
+	Client Client
+}
+
+var singleton *Summarizer
 
 // GetInstance returns a Client singleton
-func GetInstance() *Client {
+func GetInstance() *Summarizer {
 	if singleton == nil {
-		singleton = &Client{
-			KubeClient:    kube.GetInstance(),
-			KubeClientVPA: kube.GetVPAInstance(),
+		singleton = &Summarizer{
+			Client: NewSimpleClient(),
 		}
 	}
 	return singleton
 }
 
+// UseInformerInstance sets the Client singleton to a version that uses the
+// informer. This should be called once
+func UseInformerInstance() *InformerClient {
+	informerClient := NewInformerClient()
+	singleton = &Summarizer{
+		Client: informerClient,
+	}
+	return informerClient
+}
+
 // SetInstance sets the singleton using preconstructed k8s and vpa clients. Used for testing.
-func SetInstance(k8s *kube.ClientInstance, vpa *kube.VPAClientInstance) *Client {
-	singleton = &Client{
-		KubeClient:    k8s,
-		KubeClientVPA: vpa,
+func SetInstance(k8s *kube.ClientInstance, vpa *kube.VPAClientInstance) *Summarizer {
+	singleton = &Summarizer{
+		Client: &SimpleClient{
+			KubeClient:    k8s,
+			KubeClientVPA: vpa,
+		},
 	}
 	return singleton
 }
 
 // Run creates a summary of the vpa info for all namespaces.
-func (client *Client) Run(vpaLabels map[string]string, excludeContainers string) (Summary, error) {
+func (client *Summarizer) Run(vpaLabels map[string]string, excludeContainers string) (Summary, error) {
 	klog.V(3).Infof("Looking for VPAs with labels: %v", vpaLabels)
 
-	vpaListOptions := metav1.ListOptions{
-		LabelSelector: labels.Set(vpaLabels).String(),
-	}
-
-	vpas, err := client.KubeClientVPA.Client.AutoscalingV1beta2().VerticalPodAutoscalers("").List(vpaListOptions)
+	vpas, err := client.Client.ListVerticalPodAutoscalers(vpaLabels)
 	if err != nil {
 		klog.Error(err.Error())
 	}
@@ -98,15 +109,15 @@ func (client *Client) Run(vpaLabels map[string]string, excludeContainers string)
 	return summary, nil
 }
 
-func (client *Client) constructSummary(vpas *v1beta2.VerticalPodAutoscalerList, excludeContainers string) (Summary, error) {
+func (client *Summarizer) constructSummary(vpas []v1beta2.VerticalPodAutoscaler, excludeContainers string) (Summary, error) {
 	var summary Summary
-	if len(vpas.Items) <= 0 {
+	if len(vpas) <= 0 {
 		return summary, nil
 	}
 
 	containerExclusions := strings.Split(excludeContainers, ",")
 
-	for _, vpa := range vpas.Items {
+	for _, vpa := range vpas {
 		klog.V(8).Infof("Analyzing %v vpa: %v", vpa.Spec.TargetRef.Kind, vpa.ObjectMeta.Name)
 
 		var resource resourceSummary
@@ -140,8 +151,8 @@ func (client *Client) constructSummary(vpas *v1beta2.VerticalPodAutoscalerList, 
 	return summary, nil
 }
 
-func deploymentSummary(client *Client, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
-	deployment, err := client.KubeClient.Client.AppsV1().Deployments(resource.Namespace).Get(resource.ResourceName, metav1.GetOptions{})
+func deploymentSummary(client *Summarizer, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
+	deployment, err := client.Client.GetDeployment(resource.Namespace, resource.ResourceName)
 	if err != nil {
 		klog.Errorf("Error retrieving deployment from API: %v", err)
 	}
@@ -179,8 +190,8 @@ CONTAINER_REC_LOOP:
 	}
 }
 
-func daemonsetSummary(client *Client, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
-	daemonset, err := client.KubeClient.Client.AppsV1().DaemonSets(resource.Namespace).Get(resource.ResourceName, metav1.GetOptions{})
+func daemonsetSummary(client *Summarizer, vpa v1beta2.VerticalPodAutoscaler, resource *resourceSummary, containerExclusions []string) {
+	daemonset, err := client.Client.GetDaemonSet(resource.Namespace, resource.ResourceName)
 	if err != nil {
 		klog.Errorf("Error retrieving daemonset from API: %v", err)
 	}
