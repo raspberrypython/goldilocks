@@ -15,7 +15,6 @@
 package summary
 
 import (
-	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -173,18 +172,19 @@ CONTAINER_REC_LOOP:
 		}
 
 		var container containerSummary
+		container = containerSummary{
+			ContainerName:  containerRecommendation.ContainerName,
+			UpperBound:     containerRecommendation.UpperBound,
+			LowerBound:     containerRecommendation.LowerBound,
+			Target:         containerRecommendation.Target,
+			UncappedTarget: containerRecommendation.UncappedTarget,
+		}
 		for _, c := range deployment.Spec.Template.Spec.Containers {
-			container = containerSummary{
-				ContainerName:  containerRecommendation.ContainerName,
-				UpperBound:     containerRecommendation.UpperBound,
-				LowerBound:     containerRecommendation.LowerBound,
-				Target:         containerRecommendation.Target,
-				UncappedTarget: containerRecommendation.UncappedTarget,
-			}
 			if c.Name == containerRecommendation.ContainerName {
 				klog.V(6).Infof("Resources for %s: %v", c.Name, c.Resources)
 				container.Limits = c.Resources.Limits
 				container.Requests = c.Resources.Requests
+				break
 			}
 		}
 
@@ -212,18 +212,19 @@ CONTAINER_REC_LOOP:
 		}
 
 		var container containerSummary
+		container = containerSummary{
+			ContainerName:  containerRecommendation.ContainerName,
+			UpperBound:     containerRecommendation.UpperBound,
+			LowerBound:     containerRecommendation.LowerBound,
+			Target:         containerRecommendation.Target,
+			UncappedTarget: containerRecommendation.UncappedTarget,
+		}
 		for _, c := range daemonset.Spec.Template.Spec.Containers {
-			container = containerSummary{
-				ContainerName:  containerRecommendation.ContainerName,
-				UpperBound:     containerRecommendation.UpperBound,
-				LowerBound:     containerRecommendation.LowerBound,
-				Target:         containerRecommendation.Target,
-				UncappedTarget: containerRecommendation.UncappedTarget,
-			}
 			if c.Name == containerRecommendation.ContainerName {
 				klog.V(6).Infof("Resources for %s: %v", c.Name, c.Resources)
 				container.Limits = c.Resources.Limits
 				container.Requests = c.Resources.Requests
+				break
 			}
 		}
 
@@ -251,19 +252,19 @@ CONTAINER_REC_LOOP:
 		}
 
 		var container containerSummary
+		container = containerSummary{
+			ContainerName:  containerRecommendation.ContainerName,
+			UpperBound:     containerRecommendation.UpperBound,
+			LowerBound:     containerRecommendation.LowerBound,
+			Target:         containerRecommendation.Target,
+			UncappedTarget: containerRecommendation.UncappedTarget,
+		}
 		for _, c := range statefulset.Spec.Template.Spec.Containers {
-			container = containerSummary{
-				ContainerName:  containerRecommendation.ContainerName,
-				UpperBound:     containerRecommendation.UpperBound,
-				LowerBound:     containerRecommendation.LowerBound,
-				Target:         containerRecommendation.Target,
-				UncappedTarget: containerRecommendation.UncappedTarget,
-			}
 			if c.Name == containerRecommendation.ContainerName {
-				fmt.Printf("Match Resources for %s: CR-%v, CL-%v, MR-%v, ML-%v\n", c.Name, c.Resources.Requests.Cpu(), c.Resources.Limits.Cpu(), c.Resources.Requests.Memory(), c.Resources.Limits.Memory())
 				klog.V(6).Infof("Resources for %s: %v", c.Name, c.Resources)
 				container.Limits = c.Resources.Limits
 				container.Requests = c.Resources.Requests
+				break
 			}
 		}
 
