@@ -14,6 +14,8 @@
 
 package utils
 
+import "sort"
+
 // VpaLabels is a set of default labels that get placed on every VPA.
 // TODO: Replace this with the OwnerRef pattern
 var VpaLabels = map[string]string{
@@ -39,6 +41,7 @@ func UniqueString(stringSlice []string) []string {
 			list = append(list, entry)
 		}
 	}
+	sort.Strings(list)
 	return list
 }
 

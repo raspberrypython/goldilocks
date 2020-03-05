@@ -40,7 +40,7 @@ var testUniqueStringCases = []struct {
 	{
 		description: "no duplicates",
 		testData:    []string{"one", "two", "three"},
-		expected:    []string{"one", "two", "three"},
+		expected:    []string{"one", "three", "two"},
 	},
 }
 

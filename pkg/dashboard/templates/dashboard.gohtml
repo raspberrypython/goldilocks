@@ -1,8 +1,18 @@
 {{define "dashboard"}}
+  <div class="card namespace">
+    <h3>Namespaces</h3>
+    <div class="namespace-table">
+      {{ range $namespace := .VPAData.Namespaces }}
+        <div class="namespace-name">
+          <a href="#{{ $namespace }}"><span class="chevron-nav"></span>{{ $namespace }}</a>
+        </div>
+      {{end}}
+    </div>
+  </div>
 
   {{ range $namespace := .VPAData.Namespaces }}
     <div class="card namespace">
-      <h3>Namespace: <strong>{{ $namespace }}</strong></h3>
+      <h3 id="{{ $namespace }}">Namespace: <strong>{{ $namespace }}</strong></h3>
       <div class="expandable-table">
         {{ range $resource := $.VPAData.Resources }}
           {{ if eq $resource.Namespace $namespace }}

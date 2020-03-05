@@ -169,6 +169,55 @@
   animation: fadeIn 2s;
 }
 
+.namespace-table {
+  width: 100%;
+  border-spacing: 0;
+  border-collapse: collapse;
+  --chevron-nav-width: 15px;
+  --chevron-nav-margin-right: 10px;
+  padding-bottom: 20px;
+}
+
+.namespace-table .namespace-name {
+  padding: 0px 20px;
+  margin: 0;
+  font-size: 18px;
+}
+
+.namespace-name a:link {
+  color: #333;
+  text-decoration:none;
+}
+.namespace-name a:visited {
+  color: #333;
+}
+.namespace-name a:hover {
+  color: #333;
+  text-decoration: underline;
+}
+.namespace-name a:active {
+  color: #333;
+}
+.namespace-name a:focus {
+  color: #333;
+}
+
+.namespace-table .namespace-name .chevron-nav {
+  width: var(--chevron-nav-width);
+  margin-right: var(--chevron-nav-margin-right);
+}
+
+.namespace-table .namespace-name .chevron-nav {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 10px;
+  background-image: url('../images/chevron-bottom.svg');
+  background-size: 13px auto;
+  background-repeat: no-repeat;
+  background-position-y: 3px;
+}
+
 .expandable-table {
   width: 100%;
   border-spacing: 0;
